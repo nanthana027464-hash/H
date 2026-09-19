@@ -1,0 +1,191 @@
+-- โหลด Rayfield UI Library
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- สร้างหน้าต่างหลัก (UI Window)
+local Window = Rayfield:CreateWindow({
+   Name = "Combat & ESP Hack UI",
+   LoadingTitle = "กำลังโหลดระบบยิงอัตโนมัติ & มองทะลุ...",
+   LoadingSubtitle = "by Assistant",
+   ConfigurationSaving = {
+      Enabled = false
+   },
+   Discord = {
+      Enabled = false
+   },
+   KeySystem = false,
+   Image = 6023426920 -- รูปไอคอนอนิเมะ
+})
+
+-- สร้าง แถบเมนู (Tabs)
+local AimbotTab = Window:CreateTab("ยิงอัตโนมัติ (Aimbot)", 6023426920)
+local ESPTab = Window:CreateTab("มองทะลุ (ESP)", 6023426920)
+
+--------------------------------------------------------------------
+-- 1. ระบบยิงศัตรูอัตโนมัติ (Aimbot System)
+--------------------------------------------------------------------
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local AimbotEnabled = false
+local TeamCheck = true
+local FOVRadius = 150
+
+-- สร้างวงกลม FOV แสดงระยะการเล็ง
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Thickness = 1.5
+FOVCircle.Color = Color3.fromRGB(255, 0, 0)
+FOVCircle.Filled = false
+FOVCircle.Transparency = 0.7
+FOVCircle.Visible = false
+
+AimbotTab:CreateToggle({
+   Name = "เปิด / ปิด ล็อกเป้าอัตโนมัติ (Aimbot)",
+   CurrentValue = false,
+   Flag = "AimbotToggle",
+   Callback = function(Value)
+      AimbotEnabled = Value
+      FOVCircle.Visible = Value
+   end,
+})
+
+AimbotTab:CreateToggle({
+   Name = "เช็คทีม (ไม่ล็อกพวกเดียวกัน)",
+   CurrentValue = true,
+   Flag = "TeamCheckToggle",
+   Callback = function(Value)
+      TeamCheck = Value
+   end,
+})
+
+AimbotTab:CreateSlider({
+   Name = "ขนาดวงกลมการเล็ง (FOV Radius)",
+   Range = {50, 500},
+   Increment = 10,
+   Suffix = " px",
+   CurrentValue = 150,
+   Flag = "FOVSlider",
+   Callback = function(Value)
+      FOVRadius = Value
+      FOVCircle.Radius = Value
+   end,
+})
+
+-- ฟังก์ชันค้นหาศัตรูที่อยู่ใกล้เป้าเล็งกลางจอที่สุด
+local function GetClosestEnemy()
+   local closestPlayer = nil
+   local shortestDistance = FOVRadius
+
+   for _, player in ipairs(Players:GetPlayers()) do
+      if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") then
+         if player.Character.Humanoid.Health > 0 then
+            -- เช็คทีม
+            if not TeamCheck or (LocalPlayer.Team ~= player.Team or player.Team == nil) then
+               local pos, onScreen = Camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position)
+               if onScreen then
+                  local mousePos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+                  local distance = (Vector2.new(pos.X, pos.Y) - mousePos).Magnitude
+                  if distance < shortestDistance then
+                     shortestDistance = distance
+                     closestPlayer = player
+                  end
+               end
+            end
+         end
+      end
+   end
+   return closestPlayer
+end
+
+-- Loop หันกล้องหาสู่อัตโนมัติเมื่อกดเปิด
+task.spawn(function()
+   while task.wait() do
+      FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+      FOVCircle.Radius = FOVRadius
+
+      if AimbotEnabled then
+         local target = GetClosestEnemy()
+         if target and target.Character and target.Character:FindFirstChild("Head") then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Character.Head.Position)
+         end
+      end
+   end
+end)
+
+--------------------------------------------------------------------
+-- 2. ระบบมองทะลุ (ESP / Wallhack System)
+--------------------------------------------------------------------
+local ESPEnabled = false
+local ActiveHighlights = {}
+
+local function ApplyESP(player)
+   if player ~= LocalPlayer and player.Character and not player.Character:FindFirstChild("ESPHighlight") then
+      local highlight = Instance.new("Highlight")
+      highlight.Name = "ESPHighlight"
+      highlight.Adornee = player.Character
+      highlight.FillColor = Color3.fromRGB(255, 0, 0)
+      highlight.FillTransparency = 0.5
+      highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+      highlight.OutlineTransparency = 0
+      highlight.Parent = player.Character
+      ActiveHighlights[player] = highlight
+   end
+end
+
+local function RemoveESP()
+   for _, highlight in pairs(ActiveHighlights) do
+      if highlight and highlight.Parent then
+         highlight:Destroy()
+      end
+   end
+   ActiveHighlights = {}
+end
+
+ESPTab:CreateToggle({
+   Name = "เปิด / ปิด มองทะลุศัตรู (Player ESP)",
+   CurrentValue = false,
+   Flag = "ESPToggle",
+   Callback = function(Value)
+      ESPEnabled = Value
+      if ESPEnabled then
+         for _, plr in ipairs(Players:GetPlayers()) do
+            ApplyESP(plr)
+         end
+      else
+         RemoveESP()
+      end
+   end,
+})
+
+-- อัปเดต ESP เมื่อผู้เล่นเกิดใหม่หรือย้ายเข้าเกม
+Players.PlayerAdded:Connect(function(player)
+   player.CharacterAdded:Connect(function()
+      if ESPEnabled then
+         task.wait(0.5)
+         ApplyESP(player)
+      end
+   end)
+end)
+
+for _, player in ipairs(Players:GetPlayers()) do
+   player.CharacterAdded:Connect(function()
+      if ESPEnabled then
+         task.wait(0.5)
+         ApplyESP(player)
+      end
+   end)
+end
+
+-- แจ้งเตือนเมื่อโหลดสำเร็จ
+Rayfield:Notify({
+   Title = "ระบบพร้อมใช้งาน!",
+   Content = "โหลดระบบยิงอัตโนมัติและมองทะลุเรียบร้อยแล้ว",
+   Duration = 3,
+   Image = 6023426920,
+   Actions = {
+      Ignore = {
+         Name = "ตกลง",
+         Callback = function() end
+      },
+   },
+})
